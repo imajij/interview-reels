@@ -1,0 +1,320 @@
+{
+  "skill_name": "interview-reels",
+  "notes": "Run each prompt with the skill and without it. The without-skill baseline reliably fails the framing, audio-placement and verification assertions - those are the ones that cost real rework.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "single-reel-from-landscape-interview",
+      "prompt": "I've got a 4K landscape interview from a trade show in DaVinci (project 'Trade Show Interviews', clip C0001 in the Interviews bin - it's already transcribed). Cut me one vertical reel out of it for Instagram, around 50 seconds, with the word-by-word captions we use.",
+      "expected_output": "A 1080x1920 30fps MP4, 45-60s, no black borders, audio present, karaoke captions matched to word timings, intro card + DM outro card, 3-4 unique b-roll cutaways, music bed under the dialogue.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "Output is 1080x1920 at 30fps",
+          "check": "ffprobe width/height/r_frame_rate"
+        },
+        {
+          "text": "Duration is between 45 and 65 seconds including cards",
+          "check": "ffprobe duration"
+        },
+        {
+          "text": "An audio stream exists and is not silent (mean above -30 dB)",
+          "check": "volumedetect; catches placing clips with mediaType 1"
+        },
+        {
+          "text": "No sampled frame between the cards has black edges",
+          "check": "cropdetect at 4fps, excluding intro/outro; catches zoom below 3.16x"
+        },
+        {
+          "text": "Peak level is at or below -0.5 dBFS",
+          "check": "volumedetect max_volume"
+        },
+        {
+          "text": "The reel opens on the introduction, not a payoff quote pulled from mid-interview",
+          "check": "read the first spoken line against the transcript"
+        },
+        {
+          "text": "No burned-in hook title over the footage when an intro card is present",
+          "check": "inspect a frame 2-4s in"
+        },
+        {
+          "text": "At least 3 b-roll cutaways are present and no clip is used twice",
+          "check": "inspect the cut list / timeline V2"
+        },
+        {
+          "text": "Final numbers are reported (peak, borders, duration), not just 'looks good'",
+          "check": "read the assistant's summary"
+        },
+        {
+          "text": "Every answer used is preceded by the question that prompted it",
+          "check": "compare the cut order against the transcript; a reply with no question is a fail"
+        },
+        {
+          "text": "All b-roll is real video, not a still with a push-in",
+          "check": "ffprobe nb_frames on each b-roll source; 1 frame fails"
+        },
+        {
+          "text": "The music bed is audible: quiet gaps lift at least 3 dB versus the pre-bed render",
+          "check": "quietest-window measurement before and after the bed"
+        },
+        "No b-roll cutaway ends between 0.05s and 0.5s before an interview cut (a sliver of the underlying shot reads as a freeze frame)",
+        "The final segment ends on a complete sentence, not a filler word or a dangling fragment",
+        "No two captions are on screen at the same time (the fragment a segment boundary leaves is dropped, not rendered over the next line)",
+        "A music bed is present and the agent states where the track came from and its licence basis",
+        "The intro card stays on screen long enough to read every line of it (roughly 2s for a three-line crux card, not a fixed 1s)"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "batch-reels-no-repeated-broll",
+      "prompt": "Make three reels from the Trade Show Interviews project - one each from the Speaker A, Speaker B and Speaker C clips. Same style as the ones we already posted. Don't reuse the same b-roll across them, it looks cheap.",
+      "expected_output": "Three reels, each a complete story, sharing no b-roll clip between them, each verified before delivery.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "Three separate reels are produced",
+          "check": "count output files"
+        },
+        {
+          "text": "No b-roll clip appears in more than one reel",
+          "check": "compare the b-roll lists programmatically"
+        },
+        {
+          "text": "Every reel passes the border check",
+          "check": "verify_reel.sh on each"
+        },
+        {
+          "text": "Speaker levels within a reel are within ~3 dB of each other",
+          "check": "per-phrase levels grouped by speaker"
+        },
+        {
+          "text": "Each reel stands alone as a story: who the person is, the problem, what changes it",
+          "check": "read each cut's transcript order"
+        },
+        "Each reel gets its own b-roll generated from that interviewee, and no generated clip is shared between reels",
+        "Cutaway lengths are read back from the timeline rather than assumed, and every cutaway clears the sliver rule in all three reels",
+        "After a change applied across the batch, every reel is checked - not a sample - and the check covers the whole duration of what changed"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "quiet-speaker-rescue",
+      "prompt": "In this reel the host's questions are way quieter than the guest's answers, you can barely hear him. Fix it without making the room noise worse.",
+      "expected_output": "Host and guest levels brought within a few dB, noise floor not materially raised, no clipping, with before/after numbers reported.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "Per-speaker levels are measured and reported before and after",
+          "check": "read the summary for numbers"
+        },
+        {
+          "text": "Host and guest medians end within ~3 dB",
+          "check": "per-phrase level analysis"
+        },
+        {
+          "text": "Noise floor is not raised more than a few dB",
+          "check": "quietest-window measurement before and after"
+        },
+        {
+          "text": "Peak stays at or below -0.5 dBFS",
+          "check": "volumedetect"
+        },
+        {
+          "text": "Stray per-clip gain is checked before reaching for processing",
+          "check": "read the transcript of the work"
+        },
+        {
+          "text": "SetFades is not used to fix audio",
+          "check": "inspect the approach taken"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "question-answer-pairing",
+      "prompt": "Cut a 45 second reel from the Speaker B interview (C0002). Use the bit where he says the new software paid for itself in the first month - that's the strongest line in the whole thing.",
+      "expected_output": "A reel that includes the host question that prompted that answer, rather than dropping the viewer into a reply with no question.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "The host question preceding the requested answer is included",
+          "check": "read the cut; the answer must not appear cold"
+        },
+        {
+          "text": "The reel still opens on the introduction, not on the requested payoff line",
+          "check": "check the first spoken segment"
+        },
+        {
+          "text": "Length stays within 45-60s despite adding the question",
+          "check": "ffprobe duration"
+        },
+        {
+          "text": "Cuts land on word boundaries with no clipped syllables",
+          "check": "inspect segment in/out against word timings"
+        },
+        "The included question runs to its own end - the last word of the question is audible and captioned, not trimmed mid-phrase"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "clean-cuts-no-slivers",
+      "prompt": "Here is a 2-minute landscape interview. Cut a 45-60s vertical reel from it with cutaways over at least three of the points he makes. I watched the last one you did and there were freeze frames in it and the ending just stopped mid-sentence - don't do that again.",
+      "expected_output": "A reel where every cutaway lands exactly on an interview cut or at least 0.5s clear of one, and where the first and last frames of every segment sit on complete thoughts. The agent should verify this programmatically against the cut list rather than by watching, and report the measured gaps.",
+      "files": [],
+      "assertions": [
+        "Every b-roll cutaway ends either within 0.05s of an interview cut or at least 0.5s before the next one",
+        "The measured gap between each cutaway end and the nearest cut is reported as a number",
+        "Cutaway lengths are read back from the timeline (GetEnd) rather than assumed from the frame count passed to AppendToTimeline",
+        "The closing segment ends on a complete sentence",
+        "Every question used reaches its question mark",
+        "mpdecimate or an equivalent check is run and reported, and the agent does not stop at that check alone - it also compares cutaway ends to the cut list, since a sliver is not a duplicate frame"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "garbled-transcript-no-invention",
+      "prompt": "Cut a 45-60s vertical reel from this interview. Heads up, the room was loud and the transcript has some mangled stretches in it.",
+      "expected_output": "A reel whose captions contain no invented words. Where the transcript is recoverable from context (domain terms like track-and-trace or invoicing) the agent corrects it; where a stretch is genuinely garbled the agent routes the cut around it instead of guessing, and says which stretches it skipped and why.",
+      "files": [],
+      "assertions": [
+        "Domain-term recognition errors that are recoverable from context are corrected before captions render",
+        "No caption contains words the agent guessed at to patch an unrecoverable stretch",
+        "Any stretch skipped for being unrecoverable is named in the report, with the reason",
+        "The cut still lands on complete thoughts after routing around the skipped stretch",
+        "The reel still meets the length target despite the skipped material"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "no-licensed-music-supplied",
+      "prompt": "Make me a reel from this interview. I don't have any music, just put something on it.",
+      "expected_output": "A reel with an audible bed the agent can account for. The agent should generate the bed rather than downloading an ambiguously-licensed track, state plainly what the bed is, and offer to swap in the client's own music.",
+      "files": [],
+      "assertions": [
+        "The bed is generated or comes from a source whose licence the agent can state, not an unattributed download",
+        "The agent tells the user what the bed is and offers to swap it for their own track",
+        "The bed is audible: quiet gaps lift at least 3 dB versus the pre-bed render",
+        "Speech level is unchanged within about 1 dB after the bed is added",
+        "The bed rolls off above the speech band rather than competing with the voice",
+        "Final peak is at or below -0.5 dBFS after the bed is mixed in"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "lengthen-existing-cards",
+      "prompt": "These reels are good but the intro card flashes by too fast. Make it longer in all of them.",
+      "expected_output": "Every reel re-rendered with a longer intro card whose text is on screen for the whole extended duration. Cards that fade or animate in keep their animation - the extra time is added by holding the final frame, not by freezing the first. The agent checks the card in every reel, not a sample, and reports the new durations.",
+      "files": [],
+      "assertions": [
+        "Every reel in the set is re-rendered, not just some of them",
+        "The intro card text is visible for the full extended duration in every reel",
+        "A card that fades in keeps its fade; the extra time comes from holding the last frame",
+        "The agent inspects the card in all reels rather than sampling a few",
+        "New durations are reported per reel",
+        "Downstream measurements (peak, borders, speech level after the bed) are re-run and reported"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "mixed-orientation-and-monologue",
+      "prompt": "Make reels from this folder. One of them is me talking to camera on my own, the rest are interviews at the booth.",
+      "expected_output": "Reels where every source is framed correctly regardless of how the camera was held, and where the solo piece to camera does not pump between sentences. The agent should decode a frame per source to check orientation rather than trusting stream dimensions, leave an already-vertical clip at zoom 1.0, and use gentler Voice Isolation on the monologue than on the noisy two-person interviews.",
+      "files": [],
+      "assertions": [
+        "Each source's orientation is established by decoding a frame (or Resolve's reported Resolution), not by reading stream width/height",
+        "A clip carrying a rotation flag is left at zoom 1.0 rather than being zoomed as if landscape",
+        "The subject stays fully in frame throughout every reel, checked across the whole duration",
+        "Voice Isolation on the monologue is gentler than on the interviews",
+        "The gaps between sentences are measured before and after processing, and fall by roughly 6-10 dB rather than 25+ dB",
+        "Delivered audio is 48 kHz",
+        "Speech level is unchanged by the noise processing"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "sound-design-no-repeated-effects",
+      "prompt": "Edit this next avatar video in the same style as the last one. Use the same opening-card sound effect, and after that don't repeat any effect — pull fresh metallic risers and other professional ones out of the SFX pack on the attached drive.",
+      "expected_output": "A finished vertical MP4 whose cue sheet names one distinct sound file per moment, opening with the same effect the previous piece used, every later cue a different file sourced from the supplied pack, every cue measurably audible, and dialogue level unmoved by the SFX bus.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "The opening cue is byte-identical to the one the previous piece used, not a re-pick",
+          "check": "cmp the two sfx files, or shasum both; catches 'a similar riser' passed off as the same one"
+        },
+        {
+          "text": "Every cue after the opener names a different sound file — distinct filenames equals cue count",
+          "check": "count unique names in the cue sheet; this is the whole brief and is trivially checkable"
+        },
+        {
+          "text": "Each chosen file came from the client's pack, with the specific source named per cue",
+          "check": "the write-up maps cue -> pack path; catches silently falling back to generated SFX"
+        },
+        {
+          "text": "Candidates were ranked by measurement, not by filename",
+          "check": "a score table exists giving each candidate's clearance from the 1-4 kHz speech band and, for risers, head-to-tail build"
+        },
+        {
+          "text": "Every cue is audible in isolation",
+          "check": "render the SFX bus ALONE and read each cue window's peak; a cue measured in the full mix can read 0 dB difference and still be missing"
+        },
+        {
+          "text": "Each riser is cued one full length before the moment it serves, so it peaks on the cut",
+          "check": "cue time + file duration lands within ~0.15s of the beat it introduces"
+        },
+        {
+          "text": "Speech level is unchanged by the SFX bus (drift under ~1 dB) and nothing clips",
+          "check": "volumedetect on speech windows beside loud cues vs controls; astats peak at or below -1 dBFS"
+        },
+        {
+          "text": "If the named drive is unreadable, that is reported plainly rather than quietly substituting generated effects",
+          "check": "read the write-up; a permission failure must surface, not get papered over"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "sentiment-mapped-sound-design",
+      "prompt": "From now on: whenever there's a question use a metallic riser, emphasise every point with an effect, match the sentiment — positive lines get positive sounds, negative or saddening ones get something like glass breaking or game-over, kept professional — and nudge the viewer wherever something important is happening. Get the effects fresh off the web or make them.",
+      "expected_output": "A small palette where each sound carries one fixed meaning, cued against the word timings rather than the cuts, sourced under a licence that permits commercial use, with the candidate scoring kept in the project.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "Each sound has exactly one meaning, and that meaning is written down",
+          "check": "the cue sheet maps sound -> meaning before the cue list; catches a palette assembled by vibe"
+        },
+        {
+          "text": "A sound repeats whenever its meaning repeats, and that is stated as a decision",
+          "check": "e.g. one 'point' pop on every list item; a palette where every cue is a different file has misread the brief"
+        },
+        {
+          "text": "Every question in the script gets the riser, and none is missed",
+          "check": "grep the transcript for '?' and confirm a riser cue against each one"
+        },
+        {
+          "text": "Risers peak ON the question mark, not at the cut",
+          "check": "cue time + file duration lands within ~0.2s of the word that ends the question"
+        },
+        {
+          "text": "Negative lines get the negative sound and positive lines the positive one — no crossovers",
+          "check": "read each cued line against its sound; a chime on 'here's the catch' is the failure"
+        },
+        {
+          "text": "Sources permit commercial use without attribution",
+          "check": "name the library and its licence; Pixabay Content Licence yes, Freesound varies per clip"
+        },
+        {
+          "text": "Several candidates per role were scored before one was kept",
+          "check": "a candidate table survives in the project with duration, speech-band clearance and build"
+        },
+        {
+          "text": "Every cue is audible on the SFX bus rendered alone",
+          "check": "per-cue window peak; chimes and pops are midrange and quietly vanish under dialogue"
+        },
+        {
+          "text": "Dialogue is not ducked by the denser cue list",
+          "check": "speech level beside the loudest cues vs controls, drift under ~1 dB; a 20-cue sheet pumps where a 9-cue one did not"
+        }
+      ]
+    }
+  ]
+}
